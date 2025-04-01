@@ -159,7 +159,8 @@
         y: 0,
         z: 0
       },
-      zAcceleration = false
+      zAcceleration = false,
+      collisionHeight
     }) {
       super(
         new THREE.BoxGeometry(width, height, depth),
@@ -188,14 +189,15 @@
 
       this.canDoubleJump = true;
       this.isGrounded = false;
+      this.collisionHeight = collisionHeight ?? height
     }
 
     updateSides() {
       this.right = this.position.x + this.width / 2
       this.left = this.position.x - this.width / 2
 
-      this.bottom = this.position.y - this.height / 2
-      this.top = this.position.y + this.height / 2
+      this.bottom = this.position.y - this.collisionHeight / 2
+      this.top = this.position.y + this.collisionHeight / 2
 
       this.front = this.position.z + this.depth / 2
       this.back = this.position.z - this.depth / 2
@@ -231,11 +233,11 @@
       this.updateSides()
       if (boxCollision({
         box1: this,
-        box2: walls.left
+        box2: walls.left.collisionWall
       }) || 
         boxCollision({
           box1: this,
-          box2: walls.right
+          box2: walls.right.collisionWall
         })) {
         canMoveX = false
         
@@ -251,11 +253,11 @@
       this.updateSides()
       if (boxCollision({
         box1: this,
-        box2: walls.front
+        box2: walls.front.collisionWall
       }) || 
         boxCollision({
           box1: this,
-          box2: walls.back
+          box2: walls.back.collisionWall
         })) {
         canMoveZ = false
       }
@@ -316,56 +318,109 @@
 
   // Add after the ground creation
   const walls = {
-      left: new Box({
-          width: 0.5,
-          height: 5,
-          depth: 50,
-          color: '#0369a1',
-          position: {
-              x: -5.25, // Half ground width + half wall width
-              y: 0,
-              z: 0
-          }
+    left: {
+      collisionWall: new Box({
+        width: 0.5,
+        height: 10, // Tall transparent wall for collision
+        depth: 50,
+        color: '#ffffff', // Transparent color
+        position: {
+          x: -5.25,
+          y: 5, // Centered vertically
+          z: 0
+        }
       }),
-      right: new Box({
-          width: 0.5,
-          height: 5,
-          depth: 50,
-          color: '#0369a1',
-          position: {
-              x: 5.25, // Half ground width + half wall width
-              y: 0,
-              z: 0
-          }
-      }),
-      front: new Box({
-          width: 10,
-          height: 5,
-          depth: 0.5,
-          color: '#0369a1',
-          position: {
-              x: 0,
-              y: 0,
-              z: 25 // Half ground depth + half wall depth
-          }
-      }),
-      back: new Box({
-          width: 10,
-          height: 5,
-          depth: 0.5,
-          color: '#0369a1',
-          position: {
-              x: 0,
-              y: 0,
-              z: -25 // -(Half ground depth + half wall depth)
-          }
+      visualWall: new Box({
+        width: 0.5,
+        height: 1.5, // Short visible wall
+        depth: 50,
+        color: '#0369a1', // Blue color
+        position: {
+          x: -5.25,
+          y: -1, // Centered vertically
+          z: 0
+        }
       })
+    },
+    right: {
+      collisionWall: new Box({
+        width: 0.5,
+        height: 10,
+        depth: 50,
+        color: '#ffffff',
+        position: {
+          x: 5.25,
+          y: 5,
+          z: 0
+        }
+      }),
+      visualWall: new Box({
+        width: 0.5,
+        height: 1.5,
+        depth: 50,
+        color: '#0369a1',
+        position: {
+          x: 5.25,
+          y: -1,
+          z: 0
+        }
+      })
+    },
+    front: {
+      collisionWall: new Box({
+        width: 10,
+        height: 10,
+        depth: 0.5,
+        color: '#ffffff',
+        position: {
+          x: 0,
+          y: 5,
+          z: 25
+        }
+      }),
+      visualWall: new Box({
+        width: 10,
+        height: 1.5,
+        depth: 0.5,
+        color: '#0369a1',
+        position: {
+          x: 0,
+          y: -1,
+          z: 25
+        }
+      })
+    },
+    back: {
+      collisionWall: new Box({
+        width: 10,
+        height: 10,
+        depth: 0.5,
+        color: '#ffffff',
+        position: {
+          x: 0,
+          y: 5,
+          z: -25
+        }
+      }),
+      visualWall: new Box({
+        width: 10,
+        height: 1.5,
+        depth: 0.5,
+        color: '#0369a1',
+        position: {
+          x: 0,
+          y: -1,
+          z: -25
+        }
+      })
+    }
   };
 
-  // Make walls visible but keep collision
-  Object.values(walls).forEach(wall => {
-      wall.material.visible = true;
-      scene.add(wall);
+  // Add walls to the scene
+  Object.values(walls).forEach(({ collisionWall, visualWall }) => {
+    collisionWall.material.visible = false; // Make collision wall invisible
+    scene.add(collisionWall);
+    scene.add(visualWall);
   });
 
   // First, define the colors (after scene initialization)
@@ -796,11 +851,11 @@
     robotCollider.updateSides(); // Important to update sides
     if (boxCollision({
         box1: robotCollider,
-        box2: walls.left
+        box2: walls.left.collisionWall
     }) || 
     boxCollision({
         box1: robotCollider,
-        box2: walls.right
+        box2: walls.right.collisionWall
     })) {
         canMoveX = false;
     }
@@ -811,11 +866,11 @@
     robotCollider.updateSides(); // Important to update sides
     if (boxCollision({
         box1: robotCollider,
-        box2: walls.front
+        box2: walls.front.collisionWall
     }) || 
     boxCollision({
         box1: robotCollider,
-        box2: walls.back
+        box2: walls.back.collisionWall
     })) {
         canMoveZ = false;
     }
