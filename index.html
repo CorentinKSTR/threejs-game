@@ -208,8 +208,8 @@
 
       // Increase acceleration for enemies (red boxes)
       if (this.zAcceleration) {
-        // Check if this is an enemy by color
-        if (this.material.color.getHex() === 0xff0000) { // Red color = enemy
+        // Check if this is an enemy
+        if (this.isEnemy) { // Check for isEnemy flag instead of material color
           this.velocity.z += 0.0009; // Tripled acceleration for enemies
         } else {
           this.velocity.z += 0.0003; // Keep original for non-enemies
@@ -313,6 +313,9 @@
     }
   })
 
+  // Make ground more reflective to show colored lights better
+  ground.material.roughness = 0.4;
+  ground.material.metalness = 0.2;
   ground.receiveShadow = true
   scene.add(ground)
 
@@ -959,6 +962,7 @@
       enemy.userData.lastZPosition = -20; // Track last position to detect if stuck
       enemy.userData.stuckTime = 0; // Track how long the enemy has been stuck
       
+      enemy.isEnemy = true; // Make sure recycled enemies have the flag set
       enemy.visible = true;
       scene.add(enemy);
       return enemy;
@@ -966,30 +970,53 @@
     
     // Create a new enemy if needed
     const xPos = (Math.random() - 0.5) * 8; // Smaller x range to avoid walls
-    const enemy = new Box({
-      width: 1,
-      height: 1,
-      depth: 1,
-      position: {
-        x: xPos,
-        y: 0,
-        z: -20
-      },
-      velocity: {
-        x: (Math.random() - 0.5) * 0.02, // Small random X movement
-        y: 0,
-        z: 0.015 + Math.random() * 0.01 // 3x faster base speed
-      },
-      color: 'red',
-      zAcceleration: true
-    });
+
+    // Create shader uniforms for the enemy
+    const shaderUniforms = {
+      time: { value: 0 },
+      glow: { value: 0.6 }
+    };
+
+    // Create the enemy with shader material
+    const enemy = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.ShaderMaterial({
+        uniforms: shaderUniforms,
+        vertexShader: redGlowVertexShader,
+        fragmentShader: redGlowFragmentShader,
+        transparent: true,
+        side: THREE.DoubleSide
+      })
+    );
+
+    enemy.castShadow = true;
+    enemy.receiveShadow = false; // Don't receive shadows with custom shader
+    enemy.position.set(xPos, 0, -20);
+    enemy.isEnemy = true; // Add this flag to identify enemies
     
+    // Add equivalent Box properties to the mesh
+    enemy.width = 1;
+    enemy.height = 1;
+    enemy.depth = 1;
+    enemy.velocity = {
+      x: (Math.random() - 0.5) * 0.02,
+      y: 0,
+      z: 0.015 + Math.random() * 0.01
+    };
+    enemy.gravity = -0.002;
+    enemy.zAcceleration = true;
+    enemy.updateSides = Box.prototype.updateSides;
+    enemy.applyGravity = Box.prototype.applyGravity;
+    enemy.update = Box.prototype.update;
+    
+    // Store reference to shader uniforms for animation
+    enemy.shaderUniforms = shaderUniforms;
+    
+    // Add timestamp to track when enemy was spawned
     enemy.userData.spawnTime = performance.now();
     enemy.userData.lastZPosition = -20;
     enemy.userData.stuckTime = 0;
     
-    enemy.material.emissiveIntensity = 0.5;
-    enemy.castShadow = true;
     scene.add(enemy);
     return enemy;
   }
@@ -1156,11 +1183,17 @@
     scene.background.copy(daySky).lerp(nightSky, moonIntensity);
     ground.material.color.copy(dayGround).lerp(nightGround, moonIntensity);
     
-    // Update enemy emissiveness
+    // Update enemy emissiveness and lights
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
       if (enemy.material) {
-        enemy.material.emissive.set(0x330000).multiplyScalar(moonIntensity * 0.8);
+        // Adjust emissive intensity based on time of day
+        enemy.material.emissiveIntensity = moonIntensity * 0.5 + 0.3;
+        
+        // Adjust enemy light intensity based on time of day, but only if the enemy has a light
+        if (enemy.enemyLight && i % 2 === 0) { // Only update every other frame for performance
+          enemy.enemyLight.intensity = moonIntensity * 2.0 + 1.0; // Increased intensity
+        }
       }
     }
   }
@@ -1480,4 +1513,65 @@
 
   // Call showStartMenu immediately after all initialization
   showStartMenu();
+
+  // Add a global red ambient light with very low intensity to simulate global illumination
+  const redAmbient = new THREE.AmbientLight(0xff0000, 0.03);
+  scene.add(redAmbient);
+
+  // Add these shader definitions at the top level after imports
+  const redGlowVertexShader = `
+    varying vec2 vUv;
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    
+    void main() {
+      vUv = uv;
+      vPosition = position;
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+
+  const redGlowFragmentShader = `
+    uniform float time;
+    uniform float glow;
+    varying vec2 vUv;
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+
+    void main() {
+      // Base color - translucent red
+      vec4 color = vec4(1.0, 0.0, 0.0, 0.7);
+      
+      // Add pulsing glow effect based on time
+      float pulse = 0.5 + 0.5 * sin(time * 2.0);
+      
+      // Fresnel effect - more glow at grazing angles
+      float fresnel = pow(1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+      
+      // Add glow and fresnel to the edges
+      color.rgb += vec3(0.7, 0.0, 0.0) * fresnel * glow * pulse;
+      
+      gl_FragColor = color;
+    }
+  `;
+
+  // Modify the animate function to update shader uniforms
+  // In the animate function, after updating enemies
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    
+    // Update shader uniforms if enemy has them
+    if (enemy.shaderUniforms) {
+      enemy.shaderUniforms.time.value = time * 0.001; // Convert to seconds
+      
+      // Increase glow when closer to player for dramatic effect
+      const distanceToPlayer = enemy.position.distanceTo(robotModel.position);
+      if (distanceToPlayer < 10) {
+        enemy.shaderUniforms.glow.value = THREE.MathUtils.mapLinear(
+          distanceToPlayer, 2, 10, 1.0, 0.6
+        );
+      }
+    }
+  }
 </script>
