@@ -691,6 +691,16 @@
           margin-bottom: 30px;
       `;
 
+      // Add score display
+      const scoreDisplay = document.createElement('p');
+      scoreDisplay.textContent = `Your Score: ${score}`;
+      scoreDisplay.style.cssText = `
+          color: white;
+          font-family: Arial, sans-serif;
+          font-size: 24px;
+          margin-bottom: 20px;
+      `;
+
       const buttonStyles = `
           padding: 15px 30px;
           font-size: 18px;
@@ -725,6 +735,7 @@
       });
 
       gameOverMenu.appendChild(title);
+      gameOverMenu.appendChild(scoreDisplay); // Append score display
       gameOverMenu.appendChild(restartButton);
       gameOverMenu.appendChild(settingsButton);
 
@@ -1109,6 +1120,7 @@
             box2: enemy
           })) {
             gameStarted = false;
+            stopScoreCounter(); // Stop the score counter
             cancelAnimationFrame(currentAnimationFrame);
             document.body.appendChild(createGameOverMenu());
             return;
@@ -1321,7 +1333,10 @@
   // Modify the resetGame function
   function resetGame() {
     console.log('Resetting game...');
-    
+
+    stopScoreCounter(); // Stop any existing score counter
+    startScoreCounter(); // Start the score counter
+
     // Cancel any existing animation frame
     if (currentAnimationFrame) {
         cancelAnimationFrame(currentAnimationFrame);
@@ -1686,4 +1701,40 @@
       }
     }
   }
+
+  let score = 0; // Initialize score
+  let scoreInterval = null; // Interval for updating score
+
+  // Create a score display element
+  const scoreDisplay = document.createElement('div');
+  scoreDisplay.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    padding: 10px 20px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    font-size: 18px;
+    font-family: Arial, sans-serif;
+    border-radius: 5px;
+    z-index: 1000;
+  `;
+  scoreDisplay.textContent = `Score: 0`;
+  document.body.appendChild(scoreDisplay);
+
+  // Function to start the score counter
+  function startScoreCounter() {
+    score = 0; // Reset score
+    if (scoreInterval) clearInterval(scoreInterval); // Clear any existing interval
+    scoreInterval = setInterval(() => {
+      score += 1; // Increment score by 1 every 0.1 seconds
+      scoreDisplay.textContent = `Score: ${score}`; // Update the score display
+    }, 100); // 100ms = 0.1 seconds
+  }
+
+  // Function to stop the score counter
+  function stopScoreCounter() {
+    if (scoreInterval) clearInterval(scoreInterval);
+  }
+
 </script>
