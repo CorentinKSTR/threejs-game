@@ -23,34 +23,6 @@
   import * as THREE from 'three'
   import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-  // Importer les modules de post-processing
-  const scene = new THREE.Scene()'three/addons/postprocessing/EffectComposer.js'
-  const camera = new THREE.PerspectiveCamera(stprocessing/RenderPass.js'
-    75,t { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
-    window.innerWidth / window.innerHeight,
-    0.1,inir le shader de fondu personnalisé
-    1000FadeShader = {
-  ) uniforms: {
-  camera.position.set(4.61, 2.74, 8)
-      'opacity': { value: 0.0 } // 0 = transparent, 1 = noir complet
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform sampler2D tDiffuse;
-      uniform float opacity;
-      varying vec2 vUv;
-      void main() {
-        vec4 texel = texture2D(tDiffuse, vUv);
-        gl_FragColor = mix(texel, vec4(0.0, 0.0, 0.0, 1.0), opacity);
-      }
-    `
-  };
 
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(
@@ -73,72 +45,100 @@
   renderer.physicallyCorrectLights = false; // Turn off physically correct lights
   document.body.appendChild(renderer.domElement)
 
-  // Configuration du post-processing
-  const composer = new EffectComposer(renderer);
-  const renderPass = new RenderPass(scene, camera);
-  composer.addPass(renderPass);
-
-  // Ajouter le pass de fondu
-  const fadePass = new ShaderPass(FadeShader);
-  fadePass.renderToScreen = true;
-  composer.addPass(fadePass);
-  
-  // État de transition
-  const transition = {
-    active: false,
-    fadeIn: false,
-    fadeOut: false,
-    duration: 1000,
-    startTime: 0,
-    callback: null
-  };
-  
-  // Fonctions de transition
-  function startFadeOut(duration, callback) {
-    transition.active = true;
-    transition.fadeOut = true;
-    transition.fadeIn = false;
-    transition.duration = duration || 1000;
-    transition.startTime = performance.now();
-    transition.callback = callback;
-    fadePass.uniforms.opacity.value = 0;
-  }
-  
-  function startFadeIn(duration, callback) {
-    transition.active = true;
-    transition.fadeIn = true;
-    transition.fadeOut = false;
-    transition.duration = duration || 1000;
-    transition.startTime = performance.now();
-    transition.callback = callback;
-    fadePass.uniforms.opacity.value = 1;
-  }
-  
-  // Fonction pour mettre à jour les transitions
-  function updateTransition() {
-    if (!transition.active) return;
-    
-    const elapsed = performance.now() - transition.startTime;
-    const t = Math.min(elapsed / transition.duration, 1.0);
-    
-    if (transition.fadeIn) {
-      fadePass.uniforms.opacity.value = 1.0 - t;
-    } else if (transition.fadeOut) {
-      fadePass.uniforms.opacity.value = t;
-    }
-    
-    if (t >= 1.0) {
-      transition.active = false;
-      if (transition.callback) {
-        transition.callback();
-        transition.callback = null;
-      }
-    }
-  }
-
   const controls = new OrbitControls(camera, renderer.domElement)
 
   const cameraPositions = {
+    farThirdPerson: {  // Default distant view
+        position: new THREE.Vector3(4.61, 2.74, 8),
+        target: new THREE.Vector3(0, 0, 0)
+    },
+    firstPerson: {  // Inside the character
+        position: new THREE.Vector3(0, 0.5, 0),
+        target: new THREE.Vector3(0, 0.5, -1)
+    },
+    closeThirdPerson: {  
+        position: new THREE.Vector3(0, 3, 4), // Closer to character, slightly higher
+        target: new THREE.Vector3(0, 0, -5) // Looking ahead of character
+    }
+  };
+
+  let currentView = 'farThirdPerson';
+  const viewOrder = ['farThirdPerson', 'firstPerson', 'closeThirdPerson'];
+
+  const povButton = document.createElement('button');
+  povButton.innerHTML = 'Camera: Distant View';
+  povButton.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    background: #0ea5e9;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    z-index: 1000;
+  `;
+  document.body.appendChild(povButton);
+
+  const cycleButton = document.createElement('button');
+  cycleButton.innerHTML = 'Toggle Day/Night Cycle';
+  cycleButton.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 150px;  // Position it to the left of the POV button
+    padding: 10px 20px;
+    background: #0ea5e9;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    z-index: 1000;
+  `;
+  document.body.appendChild(cycleButton);
+
+  let cycleEnabled = true;
+  let frozenTime = 0; // Store the time when cycle is paused
+
+  povButton.addEventListener('click', () => {
+    const currentIndex = viewOrder.indexOf(currentView);
+    const nextIndex = (currentIndex + 1) % viewOrder.length;
+    currentView = viewOrder[nextIndex];
+    
+    // Reset camera and controls when switching views
+    if (currentView === 'farThirdPerson') {
+        camera.position.copy(cameraPositions.farThirdPerson.position);
+        camera.lookAt(cameraPositions.farThirdPerson.target);
+        controls.reset(); // Reset orbit controls to default
+    }
+    
+    // Update button text with more descriptive names
+    let viewName;
+    switch(currentView) {
+        case 'farThirdPerson':
+            viewName = 'Distant View';
+            break;
+        case 'firstPerson':
+            viewName = 'First Person';
+            break;
+        case 'closeThirdPerson':
+            viewName = 'Close Follow';
+            break;
+    }
+    povButton.innerHTML = `Camera: ${viewName}`;
+    
+    // Only enable orbit controls for far third person view
+    controls.enabled = (currentView === 'farThirdPerson');
+    
+    povButton.blur();
+  });
+
+  cycleButton.addEventListener('click', () => {
+    cycleEnabled = !cycleEnabled;
+    cycleButton.innerHTML = cycleEnabled ? 'Pause Day/Night' : 'Resume Day/Night';
+    if (!cycleEnabled) {
+        frozenTime = time; // Store current time when pausing
+    }
     updateCelestialBodiesVisibility(); // Call our new function
     cycleButton.blur(); // Remove focus from button
   });
@@ -1069,12 +1069,9 @@
     }
   }
 
-  // Modify the animate function to use composer and handle transitions
+  // Modify the animate function to improve performance
   function animate() {
     currentAnimationFrame = requestAnimationFrame(animate);
-
-    // Update transitions
-    updateTransition();
 
     // Handle movement first
     if (gameStarted) {
@@ -1098,10 +1095,10 @@
           if (boxCollision({
             box1: robotCollider,
             box2: enemy
-          }) && !transition.active) { // Ne déclenche la collision que si aucune transition n'est active
+          })) {
             gameStarted = false;
             cancelAnimationFrame(currentAnimationFrame);
-            createGameOverMenu(); // Maintenant retourne null car le menu est créé dans le callback
+            document.body.appendChild(createGameOverMenu());
             return;
           }
         }
@@ -1143,8 +1140,8 @@
     // Update camera position - this still needs to run every frame
     updateCameraPosition();
     
-    // Use composer instead of renderer
-    composer.render();
+    // Render the scene
+    renderer.render(scene, camera);
   }
 
   // Extract day/night cycle logic to separate function for better organization
