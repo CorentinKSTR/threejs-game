@@ -1574,4 +1574,93 @@
       }
     }
   }
+
+  // Add normal map to walls
+  const textureLoader = new THREE.TextureLoader();
+  
+  // Load floor bump map
+  textureLoader.load('./assets/textures/floor_bump.jpg', function(floorTexture) {
+    // Set appropriate texture parameters for the floor
+    floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+    floorTexture.repeat.set(4, 20); // Repeat texture across the floor width and length
+    
+    // Convert ground material to MeshStandardMaterial if it's not already
+    if (!(ground.material instanceof THREE.MeshStandardMaterial)) {
+      const oldColor = ground.material.color;
+      ground.material = new THREE.MeshStandardMaterial({ 
+        color: oldColor,
+        roughness: 0.4,
+        metalness: 0.2
+      });
+    }
+    
+    // Apply normal map to ground
+    ground.material.normalMap = floorTexture;
+    ground.material.normalScale.set(0.8, 0.8); // Slightly less intense than walls
+    
+    console.log("Normal map applied to floor");
+  });
+  
+  // Load wall normal maps
+  const normalMap = textureLoader.load('./assets/textures/bump.jpg', function(texture) {
+    // Set default texture parameters
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    
+    // Apply normal map to all visual walls with different repeat settings based on orientation
+    Object.entries(walls).forEach(([direction, { visualWall }]) => {
+      // Clone the texture for each wall to have independent repeat settings
+      const wallTexture = texture.clone();
+      
+      // Set different repeat settings based on wall orientation
+      if (direction === 'left' || direction === 'right') {
+        // Side walls need repeat along Z-axis (depth) instead of X-axis (width)
+        wallTexture.repeat.set(1, 20); // 1x horizontal, 20x vertical for side walls
+        // Rotate the texture by 90 degrees for side walls
+        wallTexture.rotation = Math.PI / 2;
+        wallTexture.center.set(0.5, 0.5); // Set rotation center
+      } else {
+        // Front and back walls (keep original horizontal repeat)
+        wallTexture.repeat.set(5, 1); // 5x horizontal for front/back walls
+      }
+      
+      // Convert standard material to MeshStandardMaterial if it isn't one already
+      if (!(visualWall.material instanceof THREE.MeshStandardMaterial)) {
+        const oldColor = visualWall.material.color;
+        visualWall.material = new THREE.MeshStandardMaterial({ 
+          color: oldColor,
+          roughness: 0.7,
+          metalness: 0.3
+        });
+      }
+      
+      // Apply adjusted normal map
+      visualWall.material.normalMap = wallTexture;
+      visualWall.material.normalScale.set(1.5, 1.5); // Increase normal map intensity
+      
+      // Enable proper normal map rendering
+      visualWall.castShadow = true;
+      visualWall.receiveShadow = true;
+    });
+    
+    console.log("Normal maps applied to walls with orientation-specific settings");
+  });
+  
+  // Modify the animate function to update shader uniforms
+  // In the animate function, after updating enemies
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    
+    // Update shader uniforms if enemy has them
+    if (enemy.shaderUniforms) {
+      enemy.shaderUniforms.time.value = time * 0.001; // Convert to seconds
+      
+      // Increase glow when closer to player for dramatic effect
+      const distanceToPlayer = enemy.position.distanceTo(robotModel.position);
+      if (distanceToPlayer < 10) {
+        enemy.shaderUniforms.glow.value = THREE.MathUtils.mapLinear(
+          distanceToPlayer, 2, 10, 1.0, 0.6
+        );
+      }
+    }
+  }
 </script>
