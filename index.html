@@ -78,6 +78,9 @@
     border-radius: 5px;
     cursor: pointer;
     z-index: 1000;
+    display: inline-block; /* Ensure buttons are inline */
+    margin-left: 10px; /* Add spacing between buttons */
+    font-size: 16px; /* Ensure consistent font size */
   `;
   document.body.appendChild(povButton);
 
@@ -86,7 +89,7 @@
   cycleButton.style.cssText = `
     position: fixed;
     top: 20px;
-    right: 150px;  // Position it to the left of the POV button
+    right: 230px;
     padding: 10px 20px;
     background: #0ea5e9;
     color: white;
@@ -94,6 +97,9 @@
     border-radius: 5px;
     cursor: pointer;
     z-index: 1000;
+    display: inline-block; /* Ensure buttons are inline */
+    margin-left: 10px; /* Add spacing between buttons */
+    font-size: 16px; /* Ensure consistent font size */
   `;
   document.body.appendChild(cycleButton);
 
